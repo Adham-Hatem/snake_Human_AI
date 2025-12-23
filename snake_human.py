@@ -93,6 +93,6 @@ while running:
         pygame.draw.rect(screen, color, (*segment, CELL_SIZE, CELL_SIZE))
 
     pygame.display.flip()
-    clock.tick(10)  # FPS
+    clock.tick(10)
 
 pygame.quit()
