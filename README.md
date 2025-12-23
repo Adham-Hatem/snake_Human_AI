@@ -14,5 +14,7 @@ pip install pygame torch numpy
 
 ## Pictures
 
-https://github.com/user-attachments/assets/d088202b-62e9-4f12-9f46-698eaa9617f4
+
+[snake gif]([VIDEO-URL](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/gif.gif))
+
 ![alt text](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/snake1.png)
