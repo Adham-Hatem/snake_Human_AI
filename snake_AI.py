@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 pygame.init()
-WIDTH, HEIGHT = 400, 400
+WIDTH, HEIGHT = 200, 200
 CELL_SIZE = 20
 WHITE, BLACK, GREEN, DARK_GREEN, RED = (255, 255, 255), (0, 0, 0), (0, 255, 0), (60, 155, 60), (255, 0, 0)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -33,32 +33,30 @@ def spawn_food(snake):
 def get_state(snake, food, direction):
     head_x, head_y = snake[-1]
 
-    danger_up = (head_x, head_y - CELL_SIZE) in snake or head_y - CELL_SIZE < 0
-    danger_down = (head_x, head_y + CELL_SIZE) in snake or head_y + CELL_SIZE >= HEIGHT
-    danger_left = (head_x - CELL_SIZE, head_y) in snake or head_x - CELL_SIZE < 0
-    danger_right = (head_x + CELL_SIZE, head_y) in snake or head_x + CELL_SIZE >= WIDTH
+    body = snake[:-1]
+
+    danger_up = (head_x, head_y - CELL_SIZE) in body or head_y - CELL_SIZE < 0
+    danger_down = (head_x, head_y + CELL_SIZE) in body or head_y + CELL_SIZE >= HEIGHT
+    danger_left = (head_x - CELL_SIZE, head_y) in body or head_x - CELL_SIZE < 0
+    danger_right = (head_x + CELL_SIZE, head_y) in body or head_x + CELL_SIZE >= WIDTH
 
     food_dx = food[0] - head_x
     food_dy = food[1] - head_y
 
-    dir_up = direction == (0, -CELL_SIZE)
-    dir_down = direction == (0, CELL_SIZE)
-    dir_left = direction == (-CELL_SIZE, 0)
-    dir_right = direction == (CELL_SIZE, 0)
-
     state = [
-        int(danger_up), int(danger_down), int(danger_left), int(danger_right),
-        np.sign(food_dx), np.sign(food_dy),
-        int(dir_up), int(dir_down), int(dir_left), int(dir_right)
+        int(danger_up),
+        int(danger_down),
+        int(danger_left),
+        int(danger_right),
+        np.sign(food_dx),
+        np.sign(food_dy),
+        int(direction == (0, -CELL_SIZE)),
+        int(direction == (0, CELL_SIZE)),
+        int(direction == (-CELL_SIZE, 0)),
+        int(direction == (CELL_SIZE, 0)),
     ]
 
     return np.array(state, dtype=int)
-
-
-def is_collision(pos, snake):
-    x, y = pos
-    return x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT or pos in snake
-
 
 class DQN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -135,6 +133,7 @@ def train():
         score = 0
         snake_length = 1
         done = False
+        steps_since_food = 0
 
         while not done:
             for event in pygame.event.get():
@@ -160,19 +159,44 @@ def train():
             head_x, head_y = snake[-1]
             new_head = (head_x + direction[0], head_y + direction[1])
 
-            reward = 0
-            if is_collision(new_head, snake):
+            reward = -0.01
+
+            old_dist = abs(head_x - food[0]) + abs(head_y - food[1])
+            new_dist = abs(new_head[0] - food[0]) + abs(new_head[1] - food[1])
+
+            if new_dist < old_dist:
+                reward += 0.01
+            else:
+                reward -= 0.01
+
+            will_eat = (new_head == food)
+            body = snake if will_eat else snake[1:]
+
+            if (
+                    new_head in body or
+                    new_head[0] < 0 or new_head[0] >= WIDTH or
+                    new_head[1] < 0 or new_head[1] >= HEIGHT
+            ):
                 reward = -10
                 done = True
             else:
                 snake.append(new_head)
-                if new_head == food:
+
+                if will_eat:
                     score += 1
                     reward = 10
                     food = spawn_food(snake)
                     snake_length += 1
+                    steps_since_food = 0
+                else:
+                    steps_since_food += 1
+
                 if len(snake) > snake_length:
                     snake.pop(0)
+
+            if steps_since_food > 200:
+                reward = -10
+                done = True
 
             next_state = get_state(snake, food, direction)
             agent.remember(state, action, reward, next_state, done)
@@ -185,7 +209,7 @@ def train():
                 pygame.draw.rect(screen, color, (*segment, CELL_SIZE, CELL_SIZE))
 
             pygame.display.flip()
-            clock.tick(100)
+            clock.tick(30)
 
         generation += 1
         print(f"Generation {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
