@@ -27,6 +27,23 @@ EPSILON_START = 1.0
 EPSILON_END = 0.05
 EPSILON_DECAY = 0.995
 
+def food_reachable(snake, food):
+    head = snake[-1]
+    body = set(snake)
+    visited = set()
+    queue = deque([head])
+
+    while queue:
+        x, y = queue.popleft()
+        if (x, y) == food:
+            return True
+        visited.add((x, y))
+        for dx, dy in [(0, -CELL_SIZE), (0, CELL_SIZE), (-CELL_SIZE, 0), (CELL_SIZE, 0)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and (nx, ny) not in body and (nx, ny) not in visited:
+                queue.append((nx, ny))
+    return False
+
 def spawn_food(snake):
     while True:
         x = random.randrange(0, WIDTH, CELL_SIZE)
@@ -183,14 +200,21 @@ def train():
             if new_head in body or new_head[0]<0 or new_head[0]>=WIDTH or new_head[1]<0 or new_head[1]>=HEIGHT:
                 reward = -10
                 done = True
+
             else:
                 snake.append(new_head)
+
+                if not food_reachable(snake, food):
+                    reward = -20
+                    done = True
+
                 if will_eat:
                     score += 1
                     reward = 10
                     food = spawn_food(snake)
                     snake_length += 1
                     steps_since_food = 0
+
                 else:
                     steps_since_food += 1
 
@@ -198,7 +222,7 @@ def train():
                     snake.pop(0)
 
             if steps_since_food > 200:
-                reward = -10
+                reward = -20
                 done = True
 
             next_state = get_state(snake, food, direction)
