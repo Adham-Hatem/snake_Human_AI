@@ -188,7 +188,7 @@ def train():
             clock.tick(100)
 
         generation += 1
-        print(f"Episode {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
+        print(f"Generation {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
 
 
 train()
