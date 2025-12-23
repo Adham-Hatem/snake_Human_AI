@@ -12,9 +12,8 @@ or for all.
 pip install pygame torch numpy
 ```
 
-## Pictures
+## Preview
 
+![Gif1](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/gif.gif)
 
-[snake gif]([VIDEO-URL](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/gif.gif))
-
-![alt text](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/snake1.png)
+![Picture1](https://github.com/Adham-Hatem/snake_Human_AI/blob/main/README%20FILES/snake1.png)
