@@ -25,7 +25,7 @@ LR = 0.001
 GAMMA = 0.9
 EPSILON_START = 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY = 0.995
+EPSILON_DECAY = 0.9995
 
 def food_reachable(snake, food):
     head = snake[-1]
@@ -239,5 +239,7 @@ def train():
 
         generation +=1
         print(f"Generation {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
+        if generation % 100 == 0:
+            agent.epsilon = min(agent.epsilon + 0.1, 1.0)
 
 train()
