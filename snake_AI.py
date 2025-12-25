@@ -25,9 +25,8 @@ BATCH_SIZE = 64
 LR = 0.001
 GAMMA = 0.9
 EPSILON_START = 1.0
-EPSILON_END = 0.05
+EPSILON_END = 0.01
 EPSILON_DECAY = 0.998
-
 
 def food_reachable(snake, food):
     head = snake[-1]
@@ -99,6 +98,23 @@ def get_state(snake, food, direction):
     dist_down_left = look(-CELL_SIZE, CELL_SIZE)
     dist_down_right = look(CELL_SIZE, CELL_SIZE)
 
+    def free_space_count():
+        visited = set(snake)
+        queue = deque([snake[-1]])
+        count = 0
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in [(0, -CELL_SIZE), (0, CELL_SIZE), (-CELL_SIZE, 0), (CELL_SIZE, 0)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and (nx, ny) not in visited:
+                    visited.add((nx, ny))
+                    queue.append((nx, ny))
+                    count += 1
+        return count / ((WIDTH // CELL_SIZE) * (HEIGHT // CELL_SIZE))
+
+    tail_x, tail_y = snake[0]
+    tail_distance = (abs(head_x - tail_x) + abs(head_y - tail_y)) / (WIDTH + HEIGHT)
+
     state = [
         dist_up, dist_down, dist_left, dist_right,
         dist_up_left, dist_up_right, dist_down_left, dist_down_right,
@@ -107,10 +123,13 @@ def get_state(snake, food, direction):
         int(direction == (0, CELL_SIZE)),
         int(direction == (-CELL_SIZE, 0)),
         int(direction == (CELL_SIZE, 0)),
-        int(danger_up), int(danger_down), int(danger_left), int(danger_right)
+        int(danger_up), int(danger_down), int(danger_left), int(danger_right),
+        free_space_count(),
+        tail_distance
     ]
 
     return np.array(state, dtype=float)
+
 
 class DQN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
@@ -126,10 +145,11 @@ class DQN(nn.Module):
 
 class Agent:
     def __init__(self):
-        self.model = DQN(18, 128, 4)
+        self.model = DQN(20, 128, 4)
         self.memory = deque(maxlen=MAX_MEMORY)
         self.optimizer = optim.Adam(self.model.parameters(), lr=LR)
         self.epsilon = EPSILON_START
+        self.epsilon_min = EPSILON_END
 
     def get_action(self, state):
         if random.random() < self.epsilon:
@@ -166,12 +186,16 @@ class Agent:
         loss.backward()
         self.optimizer.step()
 
-        if self.epsilon > EPSILON_END:
+        if self.epsilon > self.epsilon_min:
             self.epsilon *= EPSILON_DECAY
 
 def train():
     agent = Agent()
     generation = 0
+    speed = 250
+    unreachable_counter = 0
+    unreachable_threshold = 3
+    counter = 0
 
     while True:
         snake = [(WIDTH // 2, HEIGHT // 2)]
@@ -189,6 +213,15 @@ def train():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     return
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        speed += 5
+                    elif event.key == pygame.K_DOWN:
+                        speed = max(1, speed - 5)
+                    elif event.key == pygame.K_LEFT:
+                        speed = 30
+                    elif event.key == pygame.K_RIGHT:
+                        speed = 250
 
             state = get_state(snake, food, direction)
             action = agent.get_action(state)
@@ -209,15 +242,13 @@ def train():
             new_head = (head_x + direction[0], head_y + direction[1])
 
             reward = 0
-            old_dist = abs(head_x - food[0]) + abs(head_y - food[1])
-            new_dist = abs(new_head[0] - food[0]) + abs(new_head[1] - food[1])
-            reward += 0.05 if new_dist < old_dist else -0.1
+            reward += 0.01
 
             will_eat = (new_head == food)
             body = snake if will_eat else snake[1:]
 
             if new_head in body or new_head[0] < 0 or new_head[0] >= WIDTH or new_head[1] < 0 or new_head[1] >= HEIGHT:
-                reward = -100
+                reward = -50
                 done = True
                 print("\nDeath By wall/tail")
             else:
@@ -228,13 +259,17 @@ def train():
                     needs_bfs = False
 
                 if not path_exists:
-                    reward -= 10
-                    print("Food Not Reachable")
+                    unreachable_counter += 1
+                    if unreachable_counter >= unreachable_threshold:
+                        reward -= 5
+                        print("Food Not Reachable")
+                else:
+                    unreachable_counter = 0
 
 
                 if will_eat:
                     score += 1
-                    reward = 40
+                    reward = 50
                     food = spawn_food(snake)
                     snake_length += 1
                     steps_since_food = 0
@@ -261,12 +296,17 @@ def train():
                 color = DARK_GREEN if i % 2 == 0 else GREEN
                 pygame.draw.rect(screen, color, (*segment, CELL_SIZE, CELL_SIZE))
             pygame.display.flip()
-            clock.tick(30)
+            clock.tick(speed)
 
         generation += 1
         print(f"Generation {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
 
         if generation % 50 == 0:
-            agent.epsilon = min(agent.epsilon + 0.1, 1.0)
+            agent.epsilon = min(1.0, agent.epsilon + 0.03)
+            counter += 1
+
+        if generation % 100 == 0:
+            agent.epsilon_min *= 0.9
+            agent.epsilon_min = max(agent.epsilon_min, 0.01)
 
 train()
