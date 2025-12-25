@@ -5,6 +5,7 @@ from collections import deque
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import heapq
 
 pygame.init()
 WIDTH, HEIGHT = 200, 200
@@ -25,24 +26,40 @@ LR = 0.001
 GAMMA = 0.9
 EPSILON_START = 1.0
 EPSILON_END = 0.05
-EPSILON_DECAY = 0.9995
+EPSILON_DECAY = 0.998
+
 
 def food_reachable(snake, food):
     head = snake[-1]
-    body = set(snake)
-    visited = set()
-    queue = deque([head])
+    body = set(snake[1:])
 
-    while queue:
-        x, y = queue.popleft()
-        if (x, y) == food:
+    open_list = []
+    heapq.heappush(open_list, (0 + manhattan(head, food), 0, head))
+
+    visited = set()
+
+    while open_list:
+        f, g, current = heapq.heappop(open_list)
+        if current == food:
             return True
-        visited.add((x, y))
+        if current in visited:
+            continue
+        visited.add(current)
+
+        x, y = current
         for dx, dy in [(0, -CELL_SIZE), (0, CELL_SIZE), (-CELL_SIZE, 0), (CELL_SIZE, 0)]:
             nx, ny = x + dx, y + dy
-            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and (nx, ny) not in body and (nx, ny) not in visited:
-                queue.append((nx, ny))
+            next_pos = (nx, ny)
+            if 0 <= nx < WIDTH and 0 <= ny < HEIGHT and next_pos not in body and next_pos not in visited:
+                g_next = g + 1
+                f_next = g_next + manhattan(next_pos, food)
+                heapq.heappush(open_list, (f_next, g_next, next_pos))
+
     return False
+
+
+def manhattan(pos1, pos2):
+    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 def spawn_food(snake):
     while True:
@@ -157,13 +174,15 @@ def train():
     generation = 0
 
     while True:
-        snake = [(WIDTH//2, HEIGHT//2)]
+        snake = [(WIDTH // 2, HEIGHT // 2)]
         direction = (0, -CELL_SIZE)
         food = spawn_food(snake)
         score = 0
         snake_length = 1
         done = False
         steps_since_food = 0
+        path_exists = True
+        needs_bfs = True
 
         while not done:
             for event in pygame.event.get():
@@ -184,36 +203,42 @@ def train():
                 next_dir = (CELL_SIZE, 0)
             else:
                 next_dir = direction
-
             direction = next_dir
+
             head_x, head_y = snake[-1]
             new_head = (head_x + direction[0], head_y + direction[1])
 
-            reward = -0.1
+            reward = 0
             old_dist = abs(head_x - food[0]) + abs(head_y - food[1])
             new_dist = abs(new_head[0] - food[0]) + abs(new_head[1] - food[1])
-            reward += 0.1 if new_dist < old_dist else -0.2
+            reward += 0.05 if new_dist < old_dist else -0.1
 
             will_eat = (new_head == food)
             body = snake if will_eat else snake[1:]
 
-            if new_head in body or new_head[0]<0 or new_head[0]>=WIDTH or new_head[1]<0 or new_head[1]>=HEIGHT:
-                reward = -10
+            if new_head in body or new_head[0] < 0 or new_head[0] >= WIDTH or new_head[1] < 0 or new_head[1] >= HEIGHT:
+                reward = -100
                 done = True
-
+                print("\nDeath By wall/tail")
             else:
                 snake.append(new_head)
 
-                if not food_reachable(snake, food):
-                    reward = -20
-                    done = True
+                if needs_bfs or not path_exists:
+                    path_exists = food_reachable(snake, food)
+                    needs_bfs = False
+
+                if not path_exists:
+                    reward -= 10
+                    print("Food Not Reachable")
+
 
                 if will_eat:
                     score += 1
-                    reward = 10
+                    reward = 40
                     food = spawn_food(snake)
                     snake_length += 1
                     steps_since_food = 0
+                    needs_bfs = True
 
                 else:
                     steps_since_food += 1
@@ -221,9 +246,10 @@ def train():
                 if len(snake) > snake_length:
                     snake.pop(0)
 
-            if steps_since_food > 200:
-                reward = -20
+            if steps_since_food > 300:
+                reward = -30
                 done = True
+                print("\nDeath By Starvation")
 
             next_state = get_state(snake, food, direction)
             agent.remember(state, action, reward, next_state, done)
@@ -232,14 +258,15 @@ def train():
             screen.fill(BLACK)
             pygame.draw.rect(screen, RED, (*food, CELL_SIZE, CELL_SIZE))
             for i, segment in enumerate(snake):
-                color = DARK_GREEN if i%2==0 else GREEN
+                color = DARK_GREEN if i % 2 == 0 else GREEN
                 pygame.draw.rect(screen, color, (*segment, CELL_SIZE, CELL_SIZE))
             pygame.display.flip()
             clock.tick(30)
 
-        generation +=1
+        generation += 1
         print(f"Generation {generation} | Score: {score} | Epsilon: {agent.epsilon:.2f}")
-        if generation % 100 == 0:
+
+        if generation % 50 == 0:
             agent.epsilon = min(agent.epsilon + 0.1, 1.0)
 
 train()
