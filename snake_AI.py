@@ -305,8 +305,4 @@ def train():
             agent.epsilon = min(1.0, agent.epsilon + 0.03)
             counter += 1
 
-        if generation % 100 == 0:
-            agent.epsilon_min *= 0.9
-            agent.epsilon_min = max(agent.epsilon_min, 0.01)
-
 train()
